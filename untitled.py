@@ -8,6 +8,7 @@ class Student(object):
 s = Student()
 s.test()
 s.test2()
+s.test2()
 
 
 
