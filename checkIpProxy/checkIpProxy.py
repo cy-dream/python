@@ -62,7 +62,7 @@ def send_email():
 	# Sender's Email Account
 	smtp_server = 'smtp.gmail.com'
 	from_addr = 'li18713823671@gmail.com'
-	password = 'li258369!'
+	password = '******'
 
 	# Receiver's Email Account
 	to_addr = ['18713823671@163.com']
@@ -97,7 +97,6 @@ def _format_addr(s):
 #		compare_time(time_list[0])
 #		time.sleep(600)
 time_list = fetch()
-print(time_list)
 if len(time_list) != 0:
 	compare_time(time_list[0])
 
