@@ -25,10 +25,8 @@ def get_data():
 		#print(str_dict)
 		str_dict['finish_time'] = time_list[0]
 		str_dict['start_time'] = time_list[1]
-		str_dict['time'] = datetime.now()
-		print(str_dict['finish_time'])
-		print(str_dict['start_time'])
-		print(str_dict['time'])
+		time = date.today().isoformat()
+		str_dict['time'] = time
 		save_data(str_dict)
 
 
