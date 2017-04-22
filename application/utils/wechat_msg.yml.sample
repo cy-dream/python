@@ -1,6 +1,6 @@
 wechat:
   corpid: 'wx5ca89ffbd7dae3cc'
-  corpsecret: '7OtA4xOA97xbWdNWaSoKbCGUyFmC4QOwsNvbjlSrGCQN8jOaLG2uPeMWYYa-Y_t9'
+  corpsecret: '********'
   agentid:  3
 
 mongo:

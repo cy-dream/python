@@ -24,6 +24,3 @@ def message():
   if not_exist_user_email:
     text['invaliduser'] = not_exist_user_email
   return jsonify(text), 201
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
