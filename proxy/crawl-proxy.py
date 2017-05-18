@@ -1,6 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+# HOW TO RUN?
+# python3 crawl-proxy.py (default --checkurl https://api.ipify.org/)
+# python3 crawl-proxy.py --checkurl https://newyork.craigslist.org/
+
+
 import argparse
 import logging
 import re
@@ -19,16 +24,26 @@ from twisted.internet import reactor,defer,task
 import pymongo
 from queue import Queue
 
-logger = logging.getLogger("IPlogger")
-logger.setLevel(logging.INFO)
-filehandler = logging.FileHandler('fetch_ip.log','w')
-formatter = logging.Formatter(
-    '%(asctime)s  %(filename)s [line: %(lineno)d]  %(levelname)s - %(message)s'
-    ,datefmt='%a, %d %b %Y %H:%M:%S',)
-filehandler.setFormatter(formatter)
-logger.addHandler(filehandler)
+def log(args):
+  logger = logging.getLogger("IPlogger")
+  logger.setLevel(logging.INFO)
+  filehandler = logging.FileHandler(map_checkurl_to_collection_name_and_logfile(args)[1],'w')
+  formatter =  logging.Formatter('%(asctime)s  %(filename)s  %(levelname)s - %(message)s',datefmt='%a, %d %b %Y %H:%M:%S',)
+  filehandler.setFormatter(formatter)
+  logger.addHandler(filehandler)
+  return logger
 
-  
+
+def map_checkurl_to_collection_name_and_logfile(args):
+  if "api.ipify.org" in args.checkurl:
+    return ("IPs","fetch_ip.log")
+  elif "craigslist" in args.checkurl:
+    return ("IPs_cg","fetch_ip_cg.log")
+  elif "zillow" in args.checkurl:
+    return ("IPs_zw","fetch_ip_zw.log")
+  elif "airbnb" in args.checkurl:
+    return ("IPs_air","fetch_ip_air.log")
+
 def parse_args():
   parser = argparse.ArgumentParser(description="Get proxy from multiple sources'")
   group0=parser.add_argument_group('common')
@@ -42,7 +57,7 @@ def parse_args():
   group1.add_argument("--maxpage",type=int,default=25,help="max page number of 'http://gatherproxy.com'")
 
   group2 = parser.add_argument_group('Proxy check')
-  group2.add_argument("--checkhttps",action="store_true", default=False,help="checking https proxy")
+  group2.add_argument("--checkurl",type=str,default="https://api.ipify.org/",help="checking url")
   group2.add_argument("--checknum",type=int,default=1,help="checking times for every proxy")
   group2.add_argument("--checkthreshold",type=float,default=0.6,help="threshold for successful request percentage")
   args = parser.parse_args()
@@ -72,12 +87,12 @@ class find_http_proxy():
     self.maxpage = args.maxpage
     self.checknum = args.checknum
     self.checkthreshold = args.checkthreshold
-    self.checkhttps = args.checkhttps
+    self.checkurl = args.checkurl
     self.timeout = args.timeout
     self.proxy_list = []
     self.passproxy = set()  # records proxy which conforms to the condition: successful rate above some level     
     self.headers = {'USER-AGENT':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.154 Safari/537.36'}
-                           
+
   def getherproxy_req(self):
     """ Get proxy from gatherproxy.com"""
     proxys=[]
@@ -139,7 +154,7 @@ class find_http_proxy():
       pass
 
   def getproxy_multi_sources(self):
-    #ip0 = self.fetch_kuaidaili()
+    ip0 = self.get_from_local()
     ip = self.getherproxy_req()
     ip1 = self.fetch_kxdaili()
     ip2 = self.fetch_yaoyaodaili()
@@ -147,9 +162,21 @@ class find_http_proxy():
     ip4 = self.fetch_xici()
     ip5 = self.fetch_swei360()
     ip6 = self.fetch_mimiip()
-    ip7 = self.fetch_ip84()
-    self.proxy_list = list(set(ip))
-    #self.proxy_list = list(set(ip+ip1+ip2+ip3+ip4+ip5+ip6+ip7))
+
+    self.proxy_list = list(set(ip0+ip+ip1+ip2+ip3+ip4+ip5+ip6))
+
+  def get_from_local(self):
+    # didsoft proxy from local files
+    proxys=[]
+    try:
+      with open("IPs.txt") as f:
+        for line in f:
+          if line.strip("\n"):
+            proxys.append(line.split("#")[0])
+    except:
+      pass
+    logger.info("Finish local")
+    return proxys
 
   def fetch_kxdaili(self):
     #kxdaili,获取可用
@@ -183,11 +210,10 @@ class find_http_proxy():
         trs = html.xpath('//*[@id="list"]/table/tbody/tr')
         for line in range(len(trs)):
           td_speed = trs[line].xpath('td[6]/text()')[0]
-          if '0秒' == td_speed:
-              td_ip = trs[line].xpath('td[1]/text()')[0]
-              td_port = trs[line].xpath('td[2]/text()')[0]
-              ip = td_ip+':'+td_port
-              proxys.append(ip)
+          td_ip = trs[line].xpath('td[1]/text()')[0]
+          td_port = trs[line].xpath('td[2]/text()')[0]
+          ip = td_ip+':'+td_port
+          proxys.append(ip)
       except:
         pass
     logger.info("Finished yaoyaodaili(length:{})".format(len(proxys)))
@@ -260,6 +286,7 @@ class find_http_proxy():
     logger.info("Finished swei360(length:{})".format(len(proxys)))
     return proxys
 
+
   def fetch_mimiip(self):
     #提取秘密代理IP前4页的代理
     startUrl = 'http://www.mimiip.com/gngao/'
@@ -281,27 +308,6 @@ class find_http_proxy():
     logger.info("Finnished mimiip(length:{})".format(len(proxys)))
     return proxys
 
-  def fetch_ip84(self):
-    #获取IP巴士前6页
-    startUrl = 'http://ip84.com/gn/'
-    proxys = []
-    for i in range(1,7):
-      url = startUrl+str(i)
-      try:
-        html = etree.HTML(self.get_html(url))
-        trs = html.xpath('//tr')
-        for line in trs[1:]:
-          td_speed = line.xpath('td[6]/text()')[0].strip()[:-1]
-          if int(td_speed)<=5:
-            td_ip = line.xpath('td[1]/text()')[0].strip()
-            td_port = line.xpath('td[2]/text()')[0].strip()
-            ip = td_ip+":"+td_port
-            proxys.append(ip)
-      except:
-        pass
-    logger.info("Finished ip84(length:{})".format(len(proxys)))
-    return proxys
-
   def fetch_66ip(self):
     #安小莫匿名IP提取api,提取最大800个
     startUrl = 'http://www.66ip.cn/nmtq.php?getnum=800&isp=0&anonymoustype=3&start=&ports=&export=&ipaddress=&area=1&proxytype=1&api=66ip'
@@ -309,7 +315,7 @@ class find_http_proxy():
       soup = BeautifulSoup(self.get_html(startUrl),"lxml")
       body = soup.body.find_all(text=re.compile('\d+\.\d+\.\d+\.\d+:\d+'))
       body = map(lambda x:x.strip(),body)
-      #logger.info("Finished 66ip(length:{})".format(len(list(body))))
+      logger.info("Finished 66ip")
 
       return list(body)
     except:
@@ -318,7 +324,7 @@ class find_http_proxy():
 
   def proxy_checker2(self, proxy):
     """ test using requests"""
-    test_url = "https://api.ipify.org" if self.checkhttps else "http://myipdoc.com/ip.php"
+    test_url = self.checkurl 
     #check_string = proxy.split(":")[0] 
     success = {}
     for times in range(self.checknum):
@@ -333,15 +339,24 @@ class find_http_proxy():
       except Exception as e:
         logger.debug("Bad proxy ip: {}".format(proxy))
         pass
-                      
+
+
 if __name__ == '__main__':
     """ crawl proxy without stop, but rests certain seconds after every time
     """
+    args = parse_args()
+    logger = log(args)
+
+    import yaml
+    configuration_file = "proxypool_config.yml"
+    with open(configuration_file) as f:
+      DB_CFG = yaml.load(f)
+
     q = Queue()
     num_worker_threads = 100
     Threadpool = []
     while True:
-      logger.info("starting...")
+      #logger.info("starting...")
       findProxy = find_http_proxy(parse_args())
       start = time.time()
       findProxy.getproxy_multi_sources()
@@ -349,27 +364,27 @@ if __name__ == '__main__':
       #findProxy.getherproxy_req()
 
       def saveproxy():
-#        print(findProxy.passproxy)
-#        with open('IpProxy', 'w') as fw:
-#          for index, x in enumerate(findProxy.passproxy):
-#            fw.write(x)
-#            fw.write('\n')
+        try:
+          if DB_CFG.get('mongo_db') and "hosts" in DB_CFG.get('mongo_db'):
+            client = pymongo.MongoClient(DB_CFG['mongo_db']['hosts'])
+        except:
+          logger.error("Wrong configuration,Please check database config file")
+          raise
 
-        client = pymongo.MongoClient("localhost")
         with client:
-          db = client['ProxyPool']
+          db = client[DB_CFG['mongo_db']['proxy_database']]
           # remove old collections, create new
-          db["IPs"].drop()
-          collection = db["IPs"] 
+          db[map_checkurl_to_collection_name_and_logfile(args)[0]].drop()
+          collection = db[map_checkurl_to_collection_name_and_logfile(args)[0]] 
           try:
             if findProxy.passproxy:
               templist = [{"_id":proxy} for proxy in findProxy.passproxy]
               collection.insert_many(templist)
-              logger.info("\n".join(findProxy.passproxy))
+              #logger.info("\n".join(findProxy.passproxy))
             else:
               templist = [{"_id":proxy} for proxy in findProxy.proxy_list]
               collection.insert_many(templist)
-              logger.info("\n".join(findProxy.passproxy))
+              #logger.info("\n".join(findProxy.passproxy))
           except:
             pass
 
