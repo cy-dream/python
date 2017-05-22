@@ -1,0 +1,9 @@
+wechat:
+  corpid: 'ww688a4e1c4746db90'
+  corpsecret: '***********'
+  agentid:  1000002
+
+mongo:
+  host: 'localhost'
+  database: 'staff'
+  collection: 'information'
