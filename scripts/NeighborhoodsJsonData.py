@@ -15,7 +15,7 @@ Usage:
     os.system('command')
 '''
 
-def download():
+def downloadZillow():
   # download shape data
   url = 'https://www.zillow.com/howto/api/neighborhood-boundaries.htm'
   response = requests.get(url)
@@ -82,10 +82,68 @@ def delete_josn():
     if len(file_type) == 2 and file_type[1] == 'json':
       os.remove(di)
 
+# sensus
+def downloadBlock():
+  # download shape data
+  url = 'https://www.census.gov/geo/maps-data/data/cbf/cbf_blkgrp.html'
+  response = requests.get(url)
+  sel = Selector(text=response.text)
+  block_url = sel.xpath('//select[@id="bg2016m"]/option/@value').extract()
+  for index, url in enumerate(block_url):
+    if index != 0:
+      print(url)
+      filename = url.split('/')[7]
+      r = requests.get(url)
+      with open(filename, 'wb') as code:
+        code.write(r.content)
+    if index == 5:
+      break
+
+def shp_convert_json_block():
+  # shp convert json
+  dir_list = os.listdir('./')
+  for di in dir_list:
+    di_before = di.split('_')[0]
+    if di_before == 'cb':
+      print(di)
+      os.system('ogr2ogr -f "GeoJSON" ./'+'/'+di+'.json ./'+di+'/'+di+'.shp')
+      os.system('rm -rf ' + di)
+
+def save_database_block():
+  # save json data database
+  size = 1000
+  counter = 0
+  client = pymongo.MongoClient('localhost')
+  with client:
+    collection = client['map']['block']
+    bulk = collection.initialize_unordered_bulk_op()
+    dirs = os.listdir('./')
+    for di in dirs:
+      file_type = di.split('.')
+      if len(file_type) == 2 and file_type[1] == 'json':
+        with open('./' + di, 'r') as f:
+          json_data = json.loads(f.read())
+          for json_item in json_data['features']:
+            counter += 1
+            bulk.insert(json_item)
+            if counter % size == 0:
+              print(counter)
+              bulk.execute()
+              bulk = collection.initialize_unordered_bulk_op()
+    if counter % size != 0:
+      bulk.execute()
 
 if __name__ == '__main__':
-  download()       # download shape data
-  extract_zip()    # Unpack the zip file
-  shp_convert_json() # shp convert json
-  save_database()   # save json data
-  delete_josn()     # delete file
+  # zillow download neighborhoods
+  # download()       # download shape data
+  # extract_zip()    # Unpack the zip file
+  # shp_convert_json() # shp convert json
+  # save_database()   # save json data
+  # delete_josn()     # delete file
+  
+  # census download block data
+  downloadBlock()
+  extract_zip()
+  #shp_convert_json_block()
+  #save_database_block()
+  #delete_josn()
